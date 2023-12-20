@@ -127,7 +127,8 @@ async def updateT(id : int):
 # course operations
 @app.post('/course/', response_model=SchemaCourse)
 async def createC(course:SchemaCourse):
-    db_course = ModelCourse(id_programme = course.id_programme, id_timetable = course.id_timetable, cdate = course.cdate)
+    db_course = ModelCourse(id_programme = course.id_programme, 
+                            id_timetable = course.id_timetable, cdate = course.cdate)
     db.session.add(db_course)
     db.session.commit()
     return db_course
@@ -164,7 +165,170 @@ async def updateC(id : int):
         db.session.commit()
         return upd_course
     
-#
+# mark operations
+@app.post('/mark/', response_model=SchemaMark)
+async def createM(mark: SchemaMark):
+    db_mark = ModelMark(mark = mark.mark)
+    db.session.add(db_mark)
+    db.session.commit()
+    db.session.refresh(db_mark)
+    return db_mark
+
+@app.get('/mark/')
+async def listM():
+    mark = db.session.query(ModelMark).all()
+    return mark
+
+@app.get('/mark/{id}')
+async def readM(id : int):
+    mark = db.session.query(ModelMark).filter(ModelMark.id_mark == id)
+    if mark == None:
+        return Response(status_code=status.HTTP_404_NOT_FOUND)
+    else:
+        return mark
+
+@app.delete('/mark/{id}')
+async def deleteM(id : int):
+    del_mark = db.session.query(ModelMark).filter(ModelMark.id_mark == id)
+    if del_mark == None:
+        return Response(status_code=status.HTTP_404_NOT_FOUND)
+    else:
+        del_mark.delete(synchronize_session=False)
+        db.session.commit()
+
+@app.put('/mark/{id}')
+async def updateM(id : int):
+    upd_mark = db.session.query(ModelMark).filter(ModelMark.id_mark == id)
+    if upd_mark == None:
+        return Response(status_code=status.HTTP_404_NOT_FOUND)
+    else:
+        upd_mark.update(synchronize_session=False)
+        db.session.commit()
+        return upd_mark
+    
+# status operations
+@app.post('/status/', response_model=SchemaStatus)
+async def createStat(status: SchemaStatus):
+    db_status = ModelStatus(status = status.status)
+    db.session.add(db_status)
+    db.session.commit()
+    db.session.refresh(db_status)
+    return db_status
+
+@app.get('/status/')
+async def listStat():
+    status = db.session.query(ModelStatus).all()
+    return status
+
+@app.get('/status/{id}')
+async def readStat(id : int):
+    stat = db.session.query(ModelStatus).filter(ModelStatus.id_status == id)
+    if stat == None:
+        return Response(status_code=status.HTTP_404_NOT_FOUND)
+    else:
+        return stat
+
+@app.delete('/status/{id}')
+async def deleteStat(id : int):
+    del_status = db.session.query(ModelStatus).filter(ModelStatus.id_status == id)
+    if del_status == None:
+        return Response(status_code=status.HTTP_404_NOT_FOUND)
+    else:
+        del_status.delete(synchronize_session=False)
+        db.session.commit()
+
+@app.put('/status/{id}')
+async def updateStat(id : int):
+    upd_status = db.session.query(ModelStatus).filter(ModelStatus.id_status == id)
+    if upd_status == None:
+        return Response(status_code=status.HTTP_404_NOT_FOUND)
+    else:
+        upd_status.update(synchronize_session=False)
+        db.session.commit()
+        return upd_status
+    
+# programme operations
+@app.post('/programme/', response_model=SchemaProgramme)
+async def createStat(prog: SchemaProgramme):
+    db_prog= ModelProgramme(level = prog.level, intensity = prog.intensity,
+                            book = prog.book, price = prog.price)
+    db.session.add(db_prog)
+    db.session.commit()
+    db.session.refresh(db_prog)
+    return db_prog
+
+@app.get('/programme/')
+async def listPr():
+    prog = db.session.query(ModelProgramme).all()
+    return prog
+
+@app.get('/programme/{id}')
+async def readPr(id : int):
+    prog = db.session.query(ModelProgramme).filter(ModelProgramme.id_programme == id)
+    if prog == None:
+        return Response(status_code=status.HTTP_404_NOT_FOUND)
+    else:
+        return prog
+
+@app.delete('/programme/{id}')
+async def deletePr(id : int):
+    del_prog = db.session.query(ModelProgramme).filter(ModelProgramme.id_programme == id)
+    if del_prog == None:
+        return Response(status_code=status.HTTP_404_NOT_FOUND)
+    else:
+        del_prog.delete(synchronize_session=False)
+        db.session.commit()
+
+@app.put('/programme/{id}')
+async def updatePr(id : int):
+    upd_prog = db.session.query(ModelProgramme).filter(ModelProgramme.id_programme == id)
+    if upd_prog == None:
+        return Response(status_code=status.HTTP_404_NOT_FOUND)
+    else:
+        upd_prog.update(synchronize_session=False)
+        db.session.commit()
+        return upd_prog
+    
+# timetable operations
+@app.post('/timetable/', response_model=SchemaTimetable)
+async def createTT(tt: SchemaTimetable):
+    db_tt = ModelTimetable(lessontime = tt.lessontime, weekday = tt.weekday)
+    db.session.add(db_tt)
+    db.session.commit()
+    db.session.refresh(db_tt)
+    return db_tt
+
+@app.get('/timetable/')
+async def listTT():
+    tt = db.session.query(ModelTimetable).all()
+    return tt
+
+@app.get('/timetable/{id}')
+async def readTT(id : int):
+    tt = db.session.query(ModelTimetable).filter(ModelTimetable.id_timetable == id)
+    if tt == None:
+        return Response(status_code=status.HTTP_404_NOT_FOUND)
+    else:
+        return tt
+
+@app.delete('/timetable/{id}')
+async def deleteTT(id : int):
+    del_tt = db.session.query(ModelTimetable).filter(ModelTimetable.id_timetable == id)
+    if del_tt == None:
+        return Response(status_code=status.HTTP_404_NOT_FOUND)
+    else:
+        del_tt.delete(synchronize_session=False)
+        db.session.commit()
+
+@app.put('/timetable/{id}')
+async def updateTT(id : int):
+    upd_tt = db.session.query(ModelTimetable).filter(ModelTimetable.id_timetable == id)
+    if upd_tt == None:
+        return Response(status_code=status.HTTP_404_NOT_FOUND)
+    else:
+        upd_tt.update(synchronize_session=False)
+        db.session.commit()
+        return upd_tt
 
 # To run locally
 if __name__ == '__main__':
