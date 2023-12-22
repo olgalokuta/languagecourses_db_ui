@@ -1,10 +1,10 @@
 import uvicorn
 from fastapi import FastAPI, Response, Request, status
 from fastapi_sqlalchemy import DBSessionMiddleware, db
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi import Form
-from sqlalchemy import desc
+from sqlalchemy import desc, func
 
 from schema import Course as SchemaCourse
 from schema import Lesson as SchemaLesson
@@ -44,6 +44,9 @@ app = FastAPI()
 # to avoid csrftokenError
 app.add_middleware(DBSessionMiddleware, db_url=os.environ['DATABASE_URL'])
 
+weekdays = {1:"Mon", 2:"Tue", 3:"Wed", 4:"Thu", 5:"Fri", 6:"Sat", 7:"Sun"}
+
+
 @app.get('/')
 async def root(request : Request):
     return templates.TemplateResponse("start.html", {"request": request})
@@ -51,20 +54,6 @@ async def root(request : Request):
 @app.get('/admin')
 async def root(request : Request):
     return templates.TemplateResponse("admin.html", {"request": request})
-
-@app.get('/admin/err')
-async def root(request : Request):
-    return templates.TemplateResponse("adminbad.html", {"request": request})
-
-@app.post("/admin")
-async def submit(nm: str = Form(...)):
-    tables = {"student", "teacher", "course", "mark", "programme", "timetable", 
-             "status", "lesson", "lresult", "teastatus", "teacontract", "stcontract"}
-    t = nm.strip().lower()
-    if t in tables:
-        return RedirectResponse("/" + nm, status.HTTP_302_FOUND)
-    else:
-        return RedirectResponse("/admin/err`", status.HTTP_302_FOUND)
 
 @app.get('/user')
 async def root(request : Request):
@@ -204,11 +193,16 @@ async def listT():
     <tr>
     <th>Name</th>
     <th>Salary</th>
+    <th>Status</th>
     </tr>
     """
     for t in teacher:
+        stat = db.session.query(ModelTeaStatus).filter(ModelTeaStatus.id_teacher == id).\
+            order_by(desc('tsdate')).first().id_status
+        stat = db.session.query(ModelStatus).filter(ModelStatus.id_status == stat).\
+            first().status
         page += '<tr><td><a href="/teacher/' + str(t.id_teacher) + '">' +\
-        t.tname +  '</a></td><td>' + str(t.salary) + '</td></tr>'
+        t.tname +  '</a></td><td>' + str(t.salary) + '</td><td>'+ stat + '</td></tr>'
     page += """
     </table>
    </body>
@@ -288,26 +282,96 @@ async def updateT(id : int, nm : str = Form(None), sl : int = Form(None)):
     return RedirectResponse("/teacher/" + str(id), status.HTTP_302_FOUND) 
     
 # course operations
-@app.post('/course/', response_model=SchemaCourse)
-def createC(course:SchemaCourse):
-    db_course = ModelCourse(id_programme = course.id_programme, 
-                            id_timetable = course.id_timetable, cdate = course.cdate)
+@app.post('/course/')
+def createC(pr : int = Form(...), tt : int = Form(...), cd : str = Form(None)):
+    if cd:
+        cd = func.to_date(cd)
+    else:
+        cd = func.to_date(func.now())
+    db_course = ModelCourse(id_programme = pr, 
+                            id_timetable = tt, cdate = cd)
     db.session.add(db_course)
     db.session.commit()
-    return db_course
+    db.session.refresh(db_course)
+    return RedirectResponse("/course/" + str(db_course.id_course), status.HTTP_302_FOUND)
 
 @app.get('/course/')
 async def listC():
     course = db.session.query(ModelCourse).all()
-    return course
+    page = """
+<html>
+   <body>
+    <form>
+    <h2>Current courses:</h2>
+         <p>Click to create:
+         <button formaction="/course/create/" type="submit">Create</button></p>
+    </form>
+    <table>
+    <tr>
+    <th>Course Id</th>
+    <th>Time</th>
+    <th>Programme</th>
+    <th>Start</th>
+    </tr>
+    """
+    for c in course:
+        tt = db.session.query(ModelTimetable).filter\
+            (ModelTimetable.id_timetable == c.id_timetable).first()
+        page += '<tr><td><a href="/course/' + str(c.id_course) + '">' +\
+            str(c.id_course) +  '</a></td><td>' + weekdays[tt.weekday] + ' ' +\
+            str(tt.lessontime) + '<td><a href="/programme/'+ str(c.id_programme) +\
+                '">' + str(c.id_programme) + '</a></td><td>'+ str(c.cdate) + '</td></tr>'
+    page += """
+    </table>
+   </body>
+</html>
+"""
+    return HTMLResponse(page)
 
-@app.get('/course/{id}', response_model=SchemaCourse)
+@app.get('/course/{id}')
 async def readC(id : int):
-    course = db.session.query(ModelCourse).filter(ModelCourse.id_course == id)
-    if course == None:
-        return Response(status_code=status.HTTP_404_NOT_FOUND)
-    else:
-        return course.first()
+    course = db.session.query(ModelCourse).filter(ModelCourse.id_course == id).first()
+    tt = db.session.query(ModelTimetable).filter\
+        (ModelTimetable.id_timetable == course.id_timetable).first()
+    page = """
+<html>
+   <body>
+    <form>
+    <h2>Course:</h2>
+         <p>Click to edit: """ +\
+    '<button formaction="/course/edit/' + str(id) + \
+    """ " type="submit">Edit</button></p>
+         <p>Click to delete: """ +\
+    '<button formaction="/course/delete/' + str(id) + \
+    """ " type="submit">Delete</button></p>
+    </form>
+    <table>
+    <tr>
+    <th>Course Id</th>
+    <th>Time</th>
+    <th>Programme</th>
+    <th>Start</th>
+    </tr>
+    """ +\
+    '<tr><td><a href="/course/' + str(course.id_course) + '">' +\
+    str(course.id_course) +  '</a></td><td>' + weekdays[tt.weekday] + ' ' +\
+    str(tt.lessontime) + '<td><a href="/programme/'+ str(course.id_programme) +\
+        '">' + str(course.id_programme) + '</a></td><td>'+ str(course.cdate) + '</td></tr>'
+    page += """
+    </table>
+   </body>
+</html>
+"""
+    return HTMLResponse(page)
+
+@app.get('/course/create/')
+async def root(request : Request):
+    return templates.TemplateResponse("createcourse.html", {"request": request})
+
+@app.get('/course/edit/{id}')
+async def root(request : Request, id: int):
+    return templates.TemplateResponse("editcourse.html", {"request": request, "id": id})
+
 
 @app.delete('/course/{id}')
 async def deleteC(id : int):
