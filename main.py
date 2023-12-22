@@ -4,7 +4,7 @@ from fastapi_sqlalchemy import DBSessionMiddleware, db
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi import Form
-from fastapi.staticfiles import StaticFiles
+from sqlalchemy import desc
 
 from schema import Course as SchemaCourse
 from schema import Lesson as SchemaLesson
@@ -121,10 +121,10 @@ def main(id : int):
    <body>
     <form>
     <h2>Student:</h2>
-         <p>Click to edit:""" +\
+         <p>Click to edit: """ +\
     '<button formaction="/student/edit/' + str(id) + \
     """ " type="submit">Edit</button></p>
-         <p>Click to delete:""" +\
+         <p>Click to delete: """ +\
     '<button formaction="/student/delete/' + str(id) + \
     """ " type="submit">Delete</button></p>
     </form>
@@ -179,27 +179,94 @@ async def updateSt(id : int, nm : str = Form(None), bl : int = Form(None)):
     return RedirectResponse("/student/" + str(id), status.HTTP_302_FOUND) 
 
  # teacher operations 
-@app.post('/teacher/', response_model=SchemaTeacher)
-def createT(teacher:SchemaTeacher):
-    db_teacher = ModelTeacher(tname= teacher.tname, salary = teacher.salary)
+@app.post('/teacher/')
+def createT(nm: str = Form(...), sl:int = Form(None)):
+    if not sl:
+        sl = 0
+    db_teacher = ModelTeacher(tname= nm, salary = sl)
     db.session.add(db_teacher)
     db.session.commit()
-    return db_teacher
+    db.session.refresh(db_teacher)
+    return RedirectResponse("/teacher/" + str(db_teacher.id_teacher), status.HTTP_302_FOUND)
 
 @app.get('/teacher/')
 async def listT():
     teacher = db.session.query(ModelTeacher).all()
-    return teacher
+    page = """
+<html>
+   <body>
+    <form>
+    <h2>Teachers:</h2>
+         <p>Click to create: 
+         <button formaction="/teacher/create/" type="submit">Create</button></p>
+    </form>
+    <table>
+    <tr>
+    <th>Name</th>
+    <th>Salary</th>
+    </tr>
+    """
+    for t in teacher:
+        page += '<tr><td><a href="/teacher/' + str(t.id_teacher) + '">' +\
+        t.tname +  '</a></td><td>' + str(t.salary) + '</td></tr>'
+    page += """
+    </table>
+   </body>
+</html>
+"""
+    return HTMLResponse(page)
 
 @app.get('/teacher/{id}')
-async def readT(id : int, response_model=SchemaTeacher):
-    teacher = db.session.query(ModelTeacher).filter(ModelTeacher.id_teacher == id)
-    if teacher == None:
-        return Response(status_code=status.HTTP_404_NOT_FOUND)
-    else:
-        return teacher.first()
+async def readT(id : int):
+    teacher = db.session.query(ModelTeacher).filter(ModelTeacher.id_teacher == id).first()
+    stat = db.session.query(ModelTeaStatus).filter(ModelTeaStatus.id_teacher == id).\
+        order_by(desc('tsdate')).first().id_status
+    stat = db.session.query(ModelStatus).filter(ModelStatus.id_status == stat).\
+        first().status
+    page = """
+<html>
+   <body>
+    <form>
+    <h2>Teacher:</h2>
+         <p>Click to edit: """ +\
+    '<button formaction="/teacher/edit/' + str(id) + \
+    """ " type="submit">Edit</button></p>
+         <p>Click to delete: """ +\
+    '<button formaction="/teacher/delete/' + str(id) + \
+    """ " type="submit">Delete</button></p>
+    </form>
+    <table>
+    <tr>
+    <th>Name</th>
+    <th>Salary</th>
+    <th>Status</th>
+    </tr>
+    """
+    page += '<tr><td>'+ teacher.tname + '</td><td>' + str(teacher.salary) + \
+        '</td><td>' + stat + '</td></tr>'
+    page += """
+    </table>
+    <h3>Attends courses:</h3>
+    <p>"""
+    # sc = db.session.query(ModelStContract).filter(ModelStContract.id_student == id)
+    # for c in sc:
+    #     page += str(c.id_course) + ' '
+    page += """
+    </p>
+   </body>
+</html>
+"""
+    return HTMLResponse(page)
 
-@app.delete('/teacher/{id}')
+@app.get('/teacher/create/')
+async def root(request : Request):
+    return templates.TemplateResponse("createteacher.html", {"request": request})
+
+@app.get('/teacher/edit/{id}')
+async def root(request : Request, id: int):
+    return templates.TemplateResponse("editteacher.html", {"request": request, "id": id})
+
+@app.get('/teacher/delete/{id}')
 async def deleteT(id : int):
     del_teacher = db.session.query(ModelTeacher).filter(ModelTeacher.id_teacher == id)
     if del_teacher == None:
@@ -207,13 +274,18 @@ async def deleteT(id : int):
     else:
         del_teacher.delete(synchronize_session=False)
         db.session.commit()
+        return RedirectResponse("/teacher/", status.HTTP_302_FOUND) 
 
-@app.put('/teacher/{id}', response_model=SchemaTeacher)
-async def updateT(id : int, tch : SchemaTeacher):
-    db.session.query(ModelTeacher).filter(ModelTeacher.id_teacher == id).\
-        update({"tname" : tch.tname, "salary" : tch.salary})
+@app.post('/teacher/{id}')
+async def updateT(id : int, nm : str = Form(None), sl : int = Form(None)):
+    if nm:
+        db.session.query(ModelTeacher).filter(ModelTeacher.id_teacher == id).\
+            update({"tname" : nm})
+    if sl:
+        db.session.query(ModelTeacher).filter(ModelTeacher.id_teacher == id).\
+            update({"salary" : sl})
     db.session.commit()
-    return db.session.query(ModelTeacher).filter(ModelTeacher.id_teacher == id).first()
+    return RedirectResponse("/teacher/" + str(id), status.HTTP_302_FOUND) 
     
 # course operations
 @app.post('/course/', response_model=SchemaCourse)
