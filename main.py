@@ -1,9 +1,10 @@
 import uvicorn
-from fastapi import FastAPI, Response, status
+from fastapi import FastAPI, Response, Request, status
 from fastapi_sqlalchemy import DBSessionMiddleware, db
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi import Form
+from fastapi.staticfiles import StaticFiles
 
 from schema import Course as SchemaCourse
 from schema import Lesson as SchemaLesson
@@ -36,12 +37,42 @@ from dotenv import load_dotenv
 
 load_dotenv('.env')
 
-templates = Jinja2Templates(directory="templates")
+templates = Jinja2Templates(directory="template")
 
 app = FastAPI()
 
 # to avoid csrftokenError
 app.add_middleware(DBSessionMiddleware, db_url=os.environ['DATABASE_URL'])
+
+@app.get('/')
+async def root(request : Request):
+    return templates.TemplateResponse("start.html", {"request": request})
+
+@app.get('/admin')
+async def root(request : Request):
+    return templates.TemplateResponse("admin.html", {"request": request})
+
+@app.get('/admin/err')
+async def root(request : Request):
+    return templates.TemplateResponse("adminbad.html", {"request": request})
+
+@app.post("/admin")
+async def submit(nm: str = Form(...)):
+    tables = {"student", "teacher", "course", "mark", "programme", "timetable", 
+             "status", "lesson", "lresult", "teastatus", "teacontract", "stcontract"}
+    t = nm.strip().lower()
+    if t in tables:
+        return RedirectResponse("/" + nm + "/view/", status.HTTP_302_FOUND)
+    else:
+        return RedirectResponse("/admin/err`", status.HTTP_302_FOUND)
+
+@app.get('/user')
+async def root(request : Request):
+    return templates.TemplateResponse("user.html", {"request": request})
+
+@app.post("/table/")
+async def submit(tables : str = Form(...)):
+    return RedirectResponse("/" + tables + "/view", status.HTTP_302_FOUND)
 
 # student operations
 
@@ -52,6 +83,33 @@ def createSt(student: SchemaStudent):
     db.session.commit()
     db.session.refresh(db_student)
     return db_student
+
+@app.get("/student/view")
+def main():
+    student = db.session.query(ModelStudent).all()
+    page = """
+<html>
+   <body>
+    <form>
+    <h2>Students:</h2>
+         <p>Click to create:
+         <button formaction="/student/create" type="submit">Create</button></p>
+    </form>
+    <table>
+    <tr>
+    <th>Name</th>
+    <th>Balance</th>
+    </tr>
+    """
+    for s in student:
+        page += '<tr><td><a href="/student/view/' + str(s.id_student) + '">' +\
+        s.sname +  '</a></td><td>' + str(s.balance) + '</td></tr>'
+    page += """
+    </table>
+   </body>
+</html>
+"""
+    return HTMLResponse(page)
 
 @app.get('/student/')
 async def listSt():
@@ -65,8 +123,48 @@ async def readSt(id : int):
         return Response(status_code=status.HTTP_404_NOT_FOUND)
     else:
         return student.first()
+    
+@app.get('/student/view/{id}')
+def main(id : int):
+    student = db.session.query(ModelStudent).filter(ModelStudent.id_student == id).first()
+    page = """
+<html>
+   <body>
+    <form>
+    <h2>Student:</h2>
+         <p>Click to edit:""" +\
+    '<button formaction="/student/edit/' + str(id) + \
+    """ " type="submit">Edit</button></p>
+         <p>Click to delete:""" +\
+    '<button formaction="/student/delete/' + str(id) + \
+    """ " type="submit">Delete</button></p>
+    </form>
+    <table>
+    <tr>
+    <th>Name</th>
+    <th>Balance</th>
+    </tr>
+    """
+    page += '<tr><td>'+ student.sname + '</td><td>' + str(student.balance) + '</td></tr>'
+    page += """
+    </table>
+   </body>
+</html>
+"""
+    return HTMLResponse(page)
 
-@app.delete('/student/{id}')
+@app.get('/student/edit/{id}')
+async def root(request : Request, id: int):
+    return templates.TemplateResponse("editstudent.html", {"request": request, "id": id})
+
+@app.put('/student/edit/{id}')
+async def updateSt(id : int, nm : str = Form(...), bl : int = Form(...)):
+    db.session.query(ModelStudent).filter(ModelStudent.id_student == id).\
+        update({"sname" : nm, "balance" : bl})
+    db.session.commit()
+    return RedirectResponse("/student/view/" + str(id), status.HTTP_302_FOUND) 
+
+@app.get('/student/delete/{id}')
 async def deleteSt(id : int):
     del_student = db.session.query(ModelStudent).filter(ModelStudent.id_student == id)
     if del_student == None:
@@ -74,6 +172,8 @@ async def deleteSt(id : int):
     else:
         del_student.delete(synchronize_session=False)
         db.session.commit()
+        return RedirectResponse("/student/view/", status.HTTP_302_FOUND) 
+
 
 @app.put('/student/{id}', response_model=SchemaStudent)
 async def updateSt(id : int, st: SchemaStudent):
