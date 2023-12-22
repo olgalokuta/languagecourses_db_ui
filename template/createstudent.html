@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html>
    <body>
-      <h2>Edit student.</h2>
-      <form action="/student/{{id}}" method="POST">
+      <h2>Create new student.</h2>
+      <form action="/student/" method="POST">
          <p>Enter name:</p>
-         <p><input type='text' name='nm'/></p>
+         <p><input type='text' name='nm' required="required"/></p>
          <p>Enter balance:</p>
          <p><input type='number' name='bl'/></p>
          <p><input type='submit' value='Save'/></p>

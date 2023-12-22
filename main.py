@@ -62,7 +62,7 @@ async def submit(nm: str = Form(...)):
              "status", "lesson", "lresult", "teastatus", "teacontract", "stcontract"}
     t = nm.strip().lower()
     if t in tables:
-        return RedirectResponse("/" + nm + "/view/", status.HTTP_302_FOUND)
+        return RedirectResponse("/" + nm, status.HTTP_302_FOUND)
     else:
         return RedirectResponse("/admin/err`", status.HTTP_302_FOUND)
 
@@ -72,19 +72,21 @@ async def root(request : Request):
 
 @app.post("/table/")
 async def submit(tables : str = Form(...)):
-    return RedirectResponse("/" + tables + "/view", status.HTTP_302_FOUND)
+    return RedirectResponse("/" + tables, status.HTTP_302_FOUND)
 
 # student operations
 
-@app.post('/student/', response_model=SchemaStudent)
-def createSt(student: SchemaStudent):
-    db_student = ModelStudent(sname = student.sname, balance = student.balance)
+@app.post('/student/')
+def createSt(nm: str = Form(...), bl:int = Form(None)):
+    if not bl:
+        bl = 0
+    db_student = ModelStudent(sname = nm, balance = bl)
     db.session.add(db_student)
     db.session.commit()
     db.session.refresh(db_student)
-    return db_student
+    return RedirectResponse("/student/" + str(db_student.id_student), status.HTTP_302_FOUND)
 
-@app.get("/student/view")
+@app.get("/student/")
 def main():
     student = db.session.query(ModelStudent).all()
     page = """
@@ -93,7 +95,7 @@ def main():
     <form>
     <h2>Students:</h2>
          <p>Click to create:
-         <button formaction="/student/create" type="submit">Create</button></p>
+         <button formaction="/student/create/" type="submit">Create</button></p>
     </form>
     <table>
     <tr>
@@ -102,7 +104,7 @@ def main():
     </tr>
     """
     for s in student:
-        page += '<tr><td><a href="/student/view/' + str(s.id_student) + '">' +\
+        page += '<tr><td><a href="/student/' + str(s.id_student) + '">' +\
         s.sname +  '</a></td><td>' + str(s.balance) + '</td></tr>'
     page += """
     </table>
@@ -110,21 +112,8 @@ def main():
 </html>
 """
     return HTMLResponse(page)
-
-@app.get('/student/')
-async def listSt():
-    student = db.session.query(ModelStudent).all()
-    return student
-
-@app.get('/student/{id}', response_model=SchemaStudent)
-async def readSt(id : int):
-    student = db.session.query(ModelStudent).filter(ModelStudent.id_student == id)
-    if student == None:
-        return Response(status_code=status.HTTP_404_NOT_FOUND)
-    else:
-        return student.first()
     
-@app.get('/student/view/{id}')
+@app.get('/student/{id}')
 def main(id : int):
     student = db.session.query(ModelStudent).filter(ModelStudent.id_student == id).first()
     page = """
@@ -148,21 +137,25 @@ def main(id : int):
     page += '<tr><td>'+ student.sname + '</td><td>' + str(student.balance) + '</td></tr>'
     page += """
     </table>
+    <h3>Attends courses:</h3>
+    <p>"""
+    sc = db.session.query(ModelStContract).filter(ModelStContract.id_student == id)
+    for c in sc:
+        page += str(c.id_course) + ' '
+    page += """
+    </p>
    </body>
 </html>
 """
     return HTMLResponse(page)
 
+@app.get('/student/create/')
+async def root(request : Request):
+    return templates.TemplateResponse("createstudent.html", {"request": request})
+
 @app.get('/student/edit/{id}')
 async def root(request : Request, id: int):
     return templates.TemplateResponse("editstudent.html", {"request": request, "id": id})
-
-@app.put('/student/edit/{id}')
-async def updateSt(id : int, nm : str = Form(...), bl : int = Form(...)):
-    db.session.query(ModelStudent).filter(ModelStudent.id_student == id).\
-        update({"sname" : nm, "balance" : bl})
-    db.session.commit()
-    return RedirectResponse("/student/view/" + str(id), status.HTTP_302_FOUND) 
 
 @app.get('/student/delete/{id}')
 async def deleteSt(id : int):
@@ -172,15 +165,18 @@ async def deleteSt(id : int):
     else:
         del_student.delete(synchronize_session=False)
         db.session.commit()
-        return RedirectResponse("/student/view/", status.HTTP_302_FOUND) 
+        return RedirectResponse("/student/", status.HTTP_302_FOUND) 
 
-
-@app.put('/student/{id}', response_model=SchemaStudent)
-async def updateSt(id : int, st: SchemaStudent):
-    db.session.query(ModelStudent).filter(ModelStudent.id_student == id).\
-        update({"sname" : st.sname, "balance" : st.balance})
+@app.post('/student/{id}')
+async def updateSt(id : int, nm : str = Form(None), bl : int = Form(None)):
+    if nm:
+        db.session.query(ModelStudent).filter(ModelStudent.id_student == id).\
+            update({"sname" : nm}, synchronize_session=False)
+    if bl:
+        db.session.query(ModelStudent).filter(ModelStudent.id_student == id).\
+            update({"balance" : bl}, synchronize_session=False)
     db.session.commit()
-    return db.session.query(ModelStudent).filter(ModelStudent.id_student == id).first()
+    return RedirectResponse("/student/" + str(id), status.HTTP_302_FOUND) 
 
  # teacher operations 
 @app.post('/teacher/', response_model=SchemaTeacher)
