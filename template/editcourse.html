@@ -1,12 +1,14 @@
 <!DOCTYPE html>
 <html>
    <body>
-      <h2>Edit teacher.</h2>
-      <form action="/teacher/{{id}}" method="POST">
-         <p>Enter name:</p>
-         <p><input type='text' name='nm'/></p>
-         <p>Enter salary:</p>
-         <p><input type='number' name='sl'/></p>
+      <h2>Update course.</h2>
+      <form action="/course/{{id}}" method="POST">
+         <p>Enter programme id:</p>
+         <p><input type='number' name='pr'/></p>
+         <p>Enter timetable id:</p>
+         <p><input type='number' name='tt'/></p>
+         <p>Enter start date (dd.mm.yyyy):</p>
+         <p><input type='text' name='cd'/></p>
          <p><input type='submit' value='Save'/></p>
       </form>
    </body>

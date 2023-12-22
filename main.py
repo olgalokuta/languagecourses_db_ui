@@ -5,6 +5,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi import Form
 from sqlalchemy import desc, func
+from datetime import datetime, date, time
 
 from schema import Course as SchemaCourse
 from schema import Lesson as SchemaLesson
@@ -285,9 +286,9 @@ async def updateT(id : int, nm : str = Form(None), sl : int = Form(None)):
 @app.post('/course/')
 def createC(pr : int = Form(...), tt : int = Form(...), cd : str = Form(None)):
     if cd:
-        cd = func.to_date(cd)
+        cd = datetime.strptime(cd, '%d.%m.%Y').date()
     else:
-        cd = func.to_date(func.now())
+        cd = datetime.now().date()
     db_course = ModelCourse(id_programme = pr, 
                             id_timetable = tt, cdate = cd)
     db.session.add(db_course)
@@ -320,7 +321,7 @@ async def listC():
         page += '<tr><td><a href="/course/' + str(c.id_course) + '">' +\
             str(c.id_course) +  '</a></td><td>' + weekdays[tt.weekday] + ' ' +\
             str(tt.lessontime) + '<td><a href="/programme/'+ str(c.id_programme) +\
-                '">' + str(c.id_programme) + '</a></td><td>'+ str(c.cdate) + '</td></tr>'
+                '">' + str(c.id_programme) + '</a></td><td>'+ date.strftime(c.cdate, '%d.%m.%Y') + '</td></tr>'
     page += """
     </table>
    </body>
@@ -356,7 +357,7 @@ async def readC(id : int):
     '<tr><td><a href="/course/' + str(course.id_course) + '">' +\
     str(course.id_course) +  '</a></td><td>' + weekdays[tt.weekday] + ' ' +\
     str(tt.lessontime) + '<td><a href="/programme/'+ str(course.id_programme) +\
-        '">' + str(course.id_programme) + '</a></td><td>'+ str(course.cdate) + '</td></tr>'
+        '">' + str(course.id_programme) + '</a></td><td>'+ date.strftime(course.cdate, '%d.%m.%Y') + '</td></tr>'
     page += """
     </table>
    </body>
@@ -373,7 +374,7 @@ async def root(request : Request, id: int):
     return templates.TemplateResponse("editcourse.html", {"request": request, "id": id})
 
 
-@app.delete('/course/{id}')
+@app.get('/course/delete/{id}')
 async def deleteC(id : int):
     del_course = db.session.query(ModelCourse).filter(ModelCourse.id_course == id)
     if del_course == None:
@@ -381,14 +382,21 @@ async def deleteC(id : int):
     else:
         del_course.delete(synchronize_session=False)
         db.session.commit()
+        return RedirectResponse("/course/", status.HTTP_302_FOUND) 
 
-@app.put('/course/{id}', response_model=SchemaCourse)
-async def updateC(id : int, c : SchemaCourse):
-    db.session.query(ModelCourse).filter(ModelCourse.id_course == id).\
-        update({"id_programme" : c.id_programme,\
-                "id_timetable" : c.id_timetable, "cdate" : c.cdate})
+@app.post('/course/{id}')
+async def updateC(id : int, tt : int = Form(None), pr : int = Form(None), cd : str = Form(None)):
+    if tt:
+        db.session.query(ModelCourse).filter(ModelCourse.id_course == id).\
+        update({"id_timetable" : tt})
+    if pr:
+        db.session.query(ModelCourse).filter(ModelCourse.id_course == id).\
+        update({"id_programme" : pr})
+    if cd:
+        db.session.query(ModelCourse).filter(ModelCourse.id_course == id).\
+        update({"cdate" : datetime.strptime(cd, '%d.%m.%Y').date()})
     db.session.commit()
-    return db.session.query(ModelCourse).filter(ModelCourse.id_course == id).first()
+    return RedirectResponse("/course/" + str(id), status.HTTP_302_FOUND) 
     
 # mark operations
 @app.post('/mark/', response_model=SchemaMark)
