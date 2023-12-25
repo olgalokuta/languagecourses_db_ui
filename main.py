@@ -298,7 +298,7 @@ def createC(pr : int = Form(...), tt : int = Form(...), cd : str = Form(None)):
 
 @app.get('/course/')
 async def listC():
-    course = db.session.query(ModelCourse).all()
+    course = db.session.query(ModelCourse).all().order_by(desc("cdate"))
     page = """
 <html>
    <body>
@@ -320,7 +320,7 @@ async def listC():
             (ModelTimetable.id_timetable == c.id_timetable).first()
         page += '<tr><td><a href="/course/' + str(c.id_course) + '">' +\
             str(c.id_course) +  '</a></td><td>' + weekdays[tt.weekday] + ' ' +\
-            str(tt.lessontime) + '<td><a href="/programme/'+ str(c.id_programme) +\
+            time.strftime(tt.lessontime, '%H:%M') + '<td><a href="/programme/'+ str(c.id_programme) +\
                 '">' + str(c.id_programme) + '</a></td><td>'+ date.strftime(c.cdate, '%d.%m.%Y') + '</td></tr>'
     page += """
     </table>
@@ -356,7 +356,7 @@ async def readC(id : int):
     """ +\
     '<tr><td><a href="/course/' + str(course.id_course) + '">' +\
     str(course.id_course) +  '</a></td><td>' + weekdays[tt.weekday] + ' ' +\
-    str(tt.lessontime) + '<td><a href="/programme/'+ str(course.id_programme) +\
+    time.strftime(tt.lessontime, '%H:%M') + '<td><a href="/programme/'+ str(course.id_programme) +\
         '">' + str(course.id_programme) + '</a></td><td>'+ date.strftime(course.cdate, '%d.%m.%Y') + '</td></tr>'
     page += """
     </table>
@@ -399,28 +399,79 @@ async def updateC(id : int, tt : int = Form(None), pr : int = Form(None), cd : s
     return RedirectResponse("/course/" + str(id), status.HTTP_302_FOUND) 
     
 # mark operations
-@app.post('/mark/', response_model=SchemaMark)
-def createM(mark: SchemaMark):
-    db_mark = ModelMark(mark = mark.mark)
+@app.post('/mark/')
+def createM(mk: int = Form(...)):
+    db_mark = ModelMark(mark = mk)
     db.session.add(db_mark)
     db.session.commit()
     db.session.refresh(db_mark)
-    return db_mark
+    return RedirectResponse("/mark/", status.HTTP_302_FOUND)
 
 @app.get('/mark/')
 async def listM():
     mark = db.session.query(ModelMark).all()
-    return mark
+    page = """
+<html>
+   <body>
+    <form>
+    <h2>Marks:</h2>
+         <p>Click to create:
+         <button formaction="/mark/create/" type="submit">Create</button></p>
+    </form>
+    <table>
+    <tr>
+    <th>Mark ID</th>
+    <th>Mark Value</th>
+    </tr>
+    """
+    for m in mark:
+        page += '<tr><td><a href="/mark/' + str(m.id_mark) + '">' +\
+        str(m.id_mark) + '</a></td><td>' + str(m.mark) + '</td></tr>'
+    page += """
+    </table>
+   </body>
+</html>
+"""
+    return HTMLResponse(page)
 
-@app.get('/mark/{id}', response_model=SchemaMark)
+@app.get('/mark/{id}')
 async def readM(id : int):
-    mark = db.session.query(ModelMark).filter(ModelMark.id_mark == id)
-    if mark == None:
-        return Response(status_code=status.HTTP_404_NOT_FOUND)
-    else:
-        return mark.first()
+    mark = db.session.query(ModelMark).filter(ModelMark.id_mark == id).first()
+    page = """
+<html>
+   <body>
+    <form>
+    <h2>Mark:</h2>
+         <p>Click to edit: """ +\
+    '<button formaction="/mark/edit/' + str(id) + \
+    """ " type="submit">Edit</button></p>
+         <p>Click to delete: """ +\
+    '<button formaction="/mark/delete/' + str(id) + \
+    """ " type="submit">Delete</button></p>
+    </form>
+    <table>
+    <tr>
+    <th>Mark ID</th>
+    <th>Mark Value</th>
+    </tr>
+    """
+    page += '<tr><td>'+ str(mark.id_mark) + '</td><td>' + str(mark.mark) + '</td></tr>'
+    page += """
+    </table>
+   </body>
+</html>
+"""
+    return HTMLResponse(page)
 
-@app.delete('/mark/{id}')
+@app.get('/mark/create/')
+async def root(request : Request):
+    return templates.TemplateResponse("createmark.html", {"request": request})
+
+@app.get('/mark/edit/{id}')
+async def root(request : Request, id: int):
+    return templates.TemplateResponse("editmark.html", {"request": request, "id": id})
+
+@app.get('/mark/delete/{id}')
 async def deleteM(id : int):
     del_mark = db.session.query(ModelMark).filter(ModelMark.id_mark == id)
     if del_mark == None:
@@ -428,13 +479,14 @@ async def deleteM(id : int):
     else:
         del_mark.delete(synchronize_session=False)
         db.session.commit()
+        return RedirectResponse("/mark/", status.HTTP_302_FOUND) 
 
-@app.put('/mark/{id}' , response_model=SchemaMark)
-async def updateM(id : int, nmark: SchemaMark):
+@app.post('/mark/{id}')
+async def updateM(id : int, mk: int = Form(...)):
     db.session.query(ModelMark).filter(ModelMark.id_mark == id).\
-        update({"mark": nmark.mark})
+        update({"mark": mk})
     db.session.commit()
-    return db.session.query(ModelMark).filter(ModelMark.id_mark == id).first()
+    return RedirectResponse("/mark/", status.HTTP_302_FOUND) 
     
 # status operations
 @app.post('/status/', response_model=SchemaStatus)
