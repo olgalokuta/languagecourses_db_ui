@@ -489,28 +489,79 @@ async def updateM(id : int, mk: int = Form(...)):
     return RedirectResponse("/mark/", status.HTTP_302_FOUND) 
     
 # status operations
-@app.post('/status/', response_model=SchemaStatus)
-def createStat(status: SchemaStatus):
-    db_status = ModelStatus(status = status.status)
+@app.post('/status/')
+def createStat(st:str = Form(...)):
+    db_status = ModelStatus(status = st)
     db.session.add(db_status)
     db.session.commit()
     db.session.refresh(db_status)
-    return db_status
+    return RedirectResponse("/status/", status.HTTP_302_FOUND)
 
 @app.get('/status/')
 async def listStat():
     status = db.session.query(ModelStatus).all()
-    return status
+    page = """
+<html>
+   <body>
+    <form>
+    <h2>Marks:</h2>
+         <p>Click to create:
+         <button formaction="/status/create/" type="submit">Create</button></p>
+    </form>
+    <table>
+    <tr>
+    <th>Status ID</th>
+    <th>Status Value</th>
+    </tr>
+    """
+    for s in status:
+        page += '<tr><td><a href="/mark/' + str(s.id_status) + '">' +\
+        str(s.id_status) + '</a></td><td>' + s.status + '</td></tr>'
+    page += """
+    </table>
+   </body>
+</html>
+"""
+    return HTMLResponse(page)
 
-@app.get('/status/{id}', response_model=SchemaStatus)
+@app.get('/status/{id}')
 async def readStat(id : int):
-    stat = db.session.query(ModelStatus).filter(ModelStatus.id_status == id)
-    if stat == None:
-        return Response(status_code=status.HTTP_404_NOT_FOUND)
-    else:
-        return stat.first()
+    stat = db.session.query(ModelStatus).filter(ModelStatus.id_status == id).first()
+    page = """
+<html>
+   <body>
+    <form>
+    <h2>Status:</h2>
+         <p>Click to edit: """ +\
+    '<button formaction="/status/edit/' + str(id) + \
+    """ " type="submit">Edit</button></p>
+         <p>Click to delete: """ +\
+    '<button formaction="/status/delete/' + str(id) + \
+    """ " type="submit">Delete</button></p>
+    </form>
+    <table>
+    <tr>
+    <th>Status ID</th>
+    <th>Status Value</th>
+    </tr>
+    """
+    page += '<tr><td>'+ str(stat.id_status) + '</td><td>' + stat.status + '</td></tr>'
+    page += """
+    </table>
+   </body>
+</html>
+"""
+    return HTMLResponse(page)
 
-@app.delete('/status/{id}')
+@app.get('/status/create/')
+async def root(request : Request):
+    return templates.TemplateResponse("createstatus.html", {"request": request})
+
+@app.get('/status/edit/{id}')
+async def root(request : Request, id: int):
+    return templates.TemplateResponse("editstatus.html", {"request": request, "id": id})
+
+@app.get('/status/delete/{id}')
 async def deleteStat(id : int):
     del_status = db.session.query(ModelStatus).filter(ModelStatus.id_status == id)
     if del_status == None:
@@ -518,16 +569,17 @@ async def deleteStat(id : int):
     else:
         del_status.delete(synchronize_session=False)
         db.session.commit()
+        return RedirectResponse("/status/", status.HTTP_302_FOUND) 
 
-@app.put('/status/{id}', response_model=SchemaStatus)
-async def updateStat(id : int, stat :SchemaStatus):
+@app.post('/status/{id}')
+async def updateStat(id : int, st: str = Form(...)):
     db.session.query(ModelStatus).filter(ModelStatus.id_status == id).\
-        update({"status" : stat.status})
+        update({"status" : st})
     db.session.commit()
-    return db.session.query(ModelStatus).filter(ModelStatus.id_status == id).first()
+    return RedirectResponse("/status/", status.HTTP_302_FOUND) 
     
 # programme operations
-@app.post('/programme/', response_model=SchemaProgramme)
+@app.post('/programme/')
 def createStat(prog: SchemaProgramme):
     db_prog= ModelProgramme(level = prog.level, intensity = prog.intensity,
                             book = prog.book, price = prog.price)
