@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+   <body>
+      <h2>Create new timetable.</h2>
+      <form action="/timetable/" method="POST">
+        <p>
+        <label for="wd">Choose weekday:</label>
+        <select name="wd">
+        <option value=1>Monday</option>
+        <option value=2>Tuesday</option>
+        <option value=3>Wednesday</option>
+        <option value=4>Thursday</option>
+        <option value=5>Friday</option>
+        <option value=6>Saturday</option>
+        <option value=7>Sunday</option>
+        </p>
+        <br>
+         <p>Enter time (HH:MM):</p>
+         <p><input type='text' name='lt' required="required"/></p>
+         <p><input type='submit' value='Save'/></p>
+      </form>
+   </body>
+</html>

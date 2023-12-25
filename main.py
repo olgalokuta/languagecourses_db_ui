@@ -320,7 +320,7 @@ async def listC():
         tt = db.session.query(ModelTimetable).filter\
             (ModelTimetable.id_timetable == c.id_timetable).first()
         page += '<tr><td><a href="/course/' + str(c.id_course) + '">' +\
-            str(c.id_course) +  '</a></td><td>' + weekdays[tt.weekday] + ' ' +\
+            str(tt.id_course) +  '</a></td><td>' + weekdays[tt.weekday] + ' ' +\
             time.strftime(tt.lessontime, '%H:%M') + '<td><a href="/programme/'+ str(c.id_programme) +\
                 '">' + str(c.id_programme) + '</a></td><td>'+ date.strftime(c.cdate, '%d.%m.%Y') + '</td></tr>'
     page += """
@@ -622,7 +622,7 @@ async def listPr():
 """
     return HTMLResponse(page)
 
-@app.get('/programme/{id}', response_model=SchemaProgramme)
+@app.get('/programme/{id}')
 async def readPr(id : int):
     prog = db.session.query(ModelProgramme).filter(ModelProgramme.id_programme == id).first()
     page = """
@@ -692,28 +692,83 @@ async def updatePr(id : int, lvl:str = Form(None), ints : str = Form(None), bk: 
     return RedirectResponse('/programme/' + str(id), status.HTTP_302_FOUND)
     
 # timetable operations
-@app.post('/timetable/', response_model=SchemaTimetable)
-def createTT(tt: SchemaTimetable):
-    db_tt = ModelTimetable(lessontime = tt.lessontime, weekday = tt.weekday)
+@app.post('/timetable/')
+def createTT(wd:int = Form(...), lt:str = Form(...)):
+    db_tt = ModelTimetable(weekday = wd, lessontime = lt)
     db.session.add(db_tt)
     db.session.commit()
     db.session.refresh(db_tt)
-    return db_tt
+    return RedirectResponse("/timetable/" + str(db_tt.id_timetable), status.HTTP_302_FOUND)
 
 @app.get('/timetable/')
 async def listTT():
-    tt = db.session.query(ModelTimetable).all()
-    return tt
+    tts = db.session.query(ModelTimetable).order_by("weekday").all()
+    page = """
+<html>
+   <body>
+    <form>
+    <h2>Timetables:</h2>
+         <p>Click to create:
+         <button formaction="/timetable/create/" type="submit">Create</button></p>
+    </form>
+    <table>
+    <tr>
+    <th>Timetable Id</th>
+    <th>Day</th>
+    <th>Time</th>
+    </tr>
+    """
+    for tt in tts:
+        page += '<tr><td><a href="/timetable/' + str(tt.id_timetable) + '">' +\
+            str(tt.id_timetable) +  '</a></td><td>' + weekdays[tt.weekday] + '</td><td>' +\
+            time.strftime(tt.lessontime, '%H:%M') + '<td></tr>'
+    page += """
+    </table>
+   </body>
+</html>
+"""
+    return HTMLResponse(page)
 
-@app.get('/timetable/{id}', response_model=SchemaTimetable)
+@app.get('/timetable/{id}')
 async def readTT(id : int):
-    tt = db.session.query(ModelTimetable).filter(ModelTimetable.id_timetable == id)
-    if tt == None:
-        return Response(status_code=status.HTTP_404_NOT_FOUND)
-    else:
-        return tt.first()
+    tt = db.session.query(ModelTimetable).filter(ModelTimetable.id_timetable == id).first()
+    page = """
+<html>
+   <body>
+    <form>
+    <h2>Timetable:</h2>
+         <p>Click to edit: """ +\
+    '<button formaction="/timetable/edit/' + str(id) + \
+    """ " type="submit">Edit</button></p>
+         <p>Click to delete: """ +\
+    '<button formaction="/timetable/delete/' + str(id) + \
+    """ " type="submit">Delete</button></p>
+    </form>
+    <table>
+    <tr>
+    <th>Timetable Id</th>
+    <th>Day</th>
+    <th>Time</th>
+    </tr>
+    """
+    page += '<tr><td>' + str(id) + '</td><td>' + weekdays[tt.weekday] + '</td><td>' +\
+        time.strftime(tt.lessontime, '%H:%M') + '<td></tr>'
+    page += """
+    </table>
+   </body>
+</html>
+"""
+    return HTMLResponse(page)
 
-@app.delete('/timetable/{id}')
+@app.get('/timetable/create/')
+async def root(request : Request):
+    return templates.TemplateResponse("createtimetable.html", {"request": request})
+
+@app.get('/timetable/edit/{id}')
+async def root(request : Request, id: int):
+    return templates.TemplateResponse("edittimetable.html", {"request": request, "id": id})
+
+@app.get('/timetable/delete/{id}')
 async def deleteTT(id : int):
     del_tt = db.session.query(ModelTimetable).filter(ModelTimetable.id_timetable == id)
     if del_tt == None:
@@ -721,13 +776,21 @@ async def deleteTT(id : int):
     else:
         del_tt.delete(synchronize_session=False)
         db.session.commit()
+        return RedirectResponse("/timetable/", status.HTTP_302_FOUND) 
 
-@app.put('/timetable/{id}', response_model=SchemaTimetable)
-async def updateTT(id : int, tt : SchemaTimetable):
+@app.post('/timetable/{id}')
+async def updateTT(id : int, wd:int = Form(None), lt: str = Form(None)):
+    cur_tt = db.session.query(ModelTimetable).filter(ModelTimetable.id_timetable == id).first()
+    if lt:
+        lt = datetime.strptime(lt, '%H:%M').time()
+    else:
+        lt = cur_tt.lessontime
+    if wd == None:
+        wd = cur_tt.weekday
     db.session.query(ModelTimetable).filter(ModelTimetable.id_timetable == id).\
-        update({"lessontime" : tt.lessontime, "weekday" : tt.weekday})
+    update({"lessontime" : lt, "weekday": wd})
     db.session.commit()
-    return db.session.query(ModelTimetable).filter(ModelTimetable.id_timetable == id).first()
+    return RedirectResponse("/timetable/" + str(id), status.HTTP_302_FOUND)
     
 # lesson operations
 @app.post('/lesson/', response_model=SchemaLesson)
@@ -767,175 +830,6 @@ async def updateLes(id : int, les : SchemaLesson):
         update({"id_course" : les.id_course, "ldate" : les.ldate, "topic" : les.topic})
     db.session.commit()
     return db.session.query(ModelLesson).filter(ModelLesson.id_lesson == id).first()
-    
-# lresult operations
-@app.post('/lresult/', response_model=SchemaLResult)
-def createLR(lr: SchemaLResult):
-    db_lr = ModelLResult(id_student = lr.id_student, id_lesson = lr.id_lesson,
-                         id_mark = lr.id_mark)
-    db.session.add(db_lr)
-    db.session.commit()
-    db.session.refresh(db_lr)
-    return db_lr
-
-@app.get('/lresult/')
-async def listLR():
-    lr = db.session.query(ModelLResult).all()
-    return lr
-
-@app.get('/lresult/{idl}/{ids}', response_model=SchemaLResult)
-async def readLR(idl : int, ids : int):
-    lr = db.session.query(ModelLResult).filter(ModelLResult.id_lesson == idl and
-                                               ModelLResult.id_student == ids)
-    if lr == None:
-        return Response(status_code=status.HTTP_404_NOT_FOUND)
-    else:
-        return lr.first()
-
-@app.delete('/lresult/{idl}/{ids}')
-async def deleteLR(idl : int, ids : int):
-    del_lr = db.session.query(ModelLResult).filter(ModelLResult.id_lesson == idl and
-                                                   ModelLResult.id_student == ids)
-    if del_lr == None:
-        return Response(status_code=status.HTTP_404_NOT_FOUND)
-    else:
-        del_lr.delete(synchronize_session=False)
-        db.session.commit()
-
-@app.put('/lresult/{idl}/{ids}', response_model=SchemaLResult)
-async def updateLR(idl : int, ids : int, lr : SchemaLResult):
-    db.session.query(ModelLResult).filter(ModelLResult.id_lesson == idl and
-        ModelLResult.id_student == ids).update({"id_student" : lr.id_student, 
-            "id_lesson" : lr.id_lesson, "id_mark" : lr.id_mark})
-    db.session.commit()
-    return db.session.query(ModelLResult).filter(ModelLResult.id_lesson == idl and
-        ModelLResult.id_student == ids).first()
-    
-# stcontract operations
-@app.post('/stcontract/', response_model=SchemaStContract)
-def createSC(sc: SchemaStContract):
-    db_sc = ModelStContract(id_student = sc.id_student, id_course = sc.id_course,
-                         scdate = sc.scdate)
-    db.session.add(db_sc)
-    db.session.commit()
-    db.session.refresh(db_sc)
-    return db_sc
-
-@app.get('/stcontract/')
-async def listSC():
-    sc = db.session.query(ModelStContract).all()
-    return sc
-
-@app.get('/stcontract/{idc}/{ids}', response_model=SchemaStContract)
-async def readSC(idc : int, ids : int):
-    sc = db.session.query(ModelStContract).filter(ModelStContract.id_course == idc and
-                                               ModelStContract.id_student == ids)
-    if sc == None:
-        return Response(status_code=status.HTTP_404_NOT_FOUND)
-    else:
-        return sc.first()
-
-@app.delete('/stcontract/{idc}/{ids}')
-async def deleteSC(idc : int, ids : int):
-    del_sc = db.session.query(ModelStContract).filter(ModelStContract.id_course == idc and
-                                                   ModelStContract.id_student == ids)
-    if del_sc == None:
-        return Response(status_code=status.HTTP_404_NOT_FOUND)
-    else:
-        del_sc.delete(synchronize_session=False)
-        db.session.commit()
-
-@app.put('/stcontract/{idc}/{ids}', response_model=SchemaStContract)
-async def updateSC(idc : int, ids : int, sc : SchemaStContract):
-    db.session.query(ModelStContract).filter(ModelStContract.id_course == idc and
-        ModelStContract.id_student == ids).update({"id_student" : sc.id_student, 
-            "id_course" : sc.id_course, "scdate" : sc.scdate})
-    db.session.commit()
-    return db.session.query(ModelStContract).filter(ModelStContract.id_course == idc and
-                            ModelStContract.id_student == ids).first()
-    
-# teastatus operations
-@app.post('/teastatus/', response_model=SchemaTeaStatus)
-def createTS(ts: SchemaTeaStatus):
-    db_ts = ModelTeaStatus(id_teacher = ts.id_teacher, id_status = ts.id_status,
-                           tsdate = ts.tsdate)
-    db.session.add(db_ts)
-    db.session.commit()
-    db.session.refresh(db_ts)
-    return db_ts
-
-@app.get('/teastatus/')
-async def listTS():
-    ts = db.session.query(ModelTeaStatus).all()
-    return ts
-
-@app.get('/teastatus/{id}')
-async def readTS(id : int):
-    ts = db.session.query(ModelTeaStatus).filter(ModelTeaStatus.id_tst == id)
-    ts.first()
-    if ts == None:
-        return Response(status_code=status.HTTP_404_NOT_FOUND)
-    else:
-        return ts.first()
-
-@app.delete('/teastatus/{id}', response_model=SchemaTeaStatus)
-async def deleteTS(id : int):
-    del_ts = db.session.query(ModelTeaStatus).filter(ModelTeaStatus.id_tst == id)
-    if del_ts == None:
-        return Response(status_code=status.HTTP_404_NOT_FOUND)
-    else:
-        del_ts.delete(synchronize_session=False)
-        db.session.commit()
-
-@app.put('/teastatus/{id}')
-async def updateTS(id : int, ts : SchemaTeaStatus):
-    db.session.query(ModelTeaStatus).filter(ModelTeaStatus.id_tst == id).\
-        update({"id_teacher" : ts.id_teacher, "id_status" : ts.id_status,"tsdate" : ts.tsdate})
-    db.session.commit()
-    return db.session.query(ModelTeaStatus).filter(ModelTeaStatus.id_tst == id).first()
-    
-# teacontract operations
-@app.post('/teacontract/', response_model=SchemaTeaContract)
-def createTC(tc: SchemaTeaContract):
-    db_tc = ModelTeaContract(id_teacher = tc.id_teacher, id_course = tc.id_course,
-                         tcdate = tc.tcdate)
-    db.session.add(db_tc)
-    db.session.commit()
-    db.session.refresh(db_tc)
-    return db_tc
-
-@app.get('/teacontract/')
-async def listTC():
-    tc = db.session.query(ModelTeaContract).all()
-    return tc
-
-@app.get('/teacontract/{idc}/{idt}', response_model=SchemaTeaContract)
-async def readTC(idc : int, idt : int):
-    tc = db.session.query(ModelTeaContract).filter(ModelTeaContract.id_course == idc and
-                                               ModelTeaContract.id_teacher == idt)
-    if tc == None:
-        return Response(status_code=status.HTTP_404_NOT_FOUND)
-    else:
-        return tc.first()
-
-@app.delete('/teacontract/{idc}/{idt}')
-async def deleteTC(idc : int, idt : int):
-    del_tc = db.session.query(ModelTeaContract).filter(ModelTeaContract.id_course == idc and
-                                                   ModelTeaContract.id_teacher == idt)
-    if del_tc == None:
-        return Response(status_code=status.HTTP_404_NOT_FOUND)
-    else:
-        del_tc.delete(synchronize_session=False)
-        db.session.commit()
-
-@app.put('/teacontract/{idc}/{idt}', response_model=SchemaTeaContract)
-async def updateTC(idc : int, idt : int, tc : SchemaTeaContract):
-    db.session.query(ModelTeaContract).filter(ModelTeaContract.id_course == idc and
-        ModelTeaContract.id_teacher == idt).update({"id_teacher" : tc.id_teacher, 
-            "id_course" : tc.id_course, "tcdate" : tc.tcdate})
-    db.session.commit()
-    return db.session.query(ModelTeaContract).filter(ModelTeaContract.id_course == idc and
-                ModelTeaContract.id_teacher == idt).first()
     
 # To run locally
 if __name__ == '__main__':
