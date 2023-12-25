@@ -46,6 +46,7 @@ app = FastAPI()
 app.add_middleware(DBSessionMiddleware, db_url=os.environ['DATABASE_URL'])
 
 weekdays = {1:"Mon", 2:"Tue", 3:"Wed", 4:"Thu", 5:"Fri", 6:"Sat", 7:"Sun"}
+intens = {"L": "Low", "M": "Medium", "I": "intense"}
 
 
 @app.get('/')
@@ -580,28 +581,89 @@ async def updateStat(id : int, st: str = Form(...)):
     
 # programme operations
 @app.post('/programme/')
-def createStat(prog: SchemaProgramme):
-    db_prog= ModelProgramme(level = prog.level, intensity = prog.intensity,
-                            book = prog.book, price = prog.price)
+def createStat(lvl:str = Form(...), ints : str = Form(...), bk: str = Form(...),\
+               pr:int = Form(...)):
+    db_prog= ModelProgramme(level = lvl, intensity = ints,
+                            book = bk, price = pr)
     db.session.add(db_prog)
     db.session.commit()
     db.session.refresh(db_prog)
-    return db_prog
+    return RedirectResponse('/programme/' + str(db_prog.id_programme), status.HTTP_302_FOUND)
 
 @app.get('/programme/')
 async def listPr():
-    prog = db.session.query(ModelProgramme).all()
-    return prog
+    prog = db.session.query(ModelProgramme).order_by("level").all()
+    page = """
+<html>
+   <body>
+    <form>
+    <h2>Programmes:</h2>
+         <p>Click to create:
+         <button formaction="/programme/create/" type="submit">Create</button></p>
+    </form>
+    <table>
+    <tr>
+    <th>Programme Id</th>
+    <th>Level</th>
+    <th>Intensity</th>
+    <th>Book</th>
+    <th>Price</th>
+    </tr>
+    """
+    for p in prog:
+        page += '<tr><td><a href="/programme/' + str(p.id_programme) + '">' +\
+            str(p.id_programme) +  '</a></td><td>' + p.level + ' ' +\
+            '<td>'+ intens[p.intensity] +\
+                '</td><td>' + p.book + '</td><td>'+ str(p.price) + '</td></tr>'
+    page += """
+    </table>
+   </body>
+</html>
+"""
+    return HTMLResponse(page)
 
 @app.get('/programme/{id}', response_model=SchemaProgramme)
 async def readPr(id : int):
-    prog = db.session.query(ModelProgramme).filter(ModelProgramme.id_programme == id)
-    if prog == None:
-        return Response(status_code=status.HTTP_404_NOT_FOUND)
-    else:
-        return prog.first()
+    prog = db.session.query(ModelProgramme).filter(ModelProgramme.id_programme == id).first()
+    page = """
+<html>
+   <body>
+    <form>
+    <h2>Programme:</h2>
+         <p>Click to edit: """ +\
+    '<button formaction="/programme/edit/' + str(id) + \
+    """ " type="submit">Edit</button></p>
+         <p>Click to delete: """ +\
+    '<button formaction="/programme/delete/' + str(id) + \
+    """ " type="submit">Delete</button></p>
+    </form>
+    <table>
+    <tr>
+    <th>Programme Id</th>
+    <th>Level</th>
+    <th>Intensity</th>
+    <th>Book</th>
+    <th>Price</th>
+    </tr>
+    """ +\
+    '<tr><td>' + str(prog.id_programme) +  '</td><td>' + prog.level + ' ' +\
+    '<td>'+ intens[prog.intensity] +'</td><td>' + prog.book + '</td><td>'+ str(prog.price) + '</td></tr>'
+    page += """
+    </table>
+   </body>
+</html>
+"""
+    return HTMLResponse(page)
 
-@app.delete('/programme/{id}')
+@app.get('/programme/create/')
+async def root(request : Request):
+    return templates.TemplateResponse("createprogramme.html", {"request": request})
+
+@app.get('/programme/edit/{id}')
+async def root(request : Request, id: int):
+    return templates.TemplateResponse("editprogramme.html", {"request": request, "id": id})
+
+@app.get('/programme/delete/{id}')
 async def deletePr(id : int):
     del_prog = db.session.query(ModelProgramme).filter(ModelProgramme.id_programme == id)
     if del_prog == None:
@@ -609,14 +671,25 @@ async def deletePr(id : int):
     else:
         del_prog.delete(synchronize_session=False)
         db.session.commit()
+        return RedirectResponse("/programme/", status.HTTP_302_FOUND) 
 
-@app.put('/programme/{id}', response_model=SchemaProgramme)
-async def updatePr(id : int, prog : SchemaProgramme):
-    db.session.query(ModelProgramme).filter(ModelProgramme.id_programme == id).\
-        update({"level" : prog.level, "intensity" : prog.intensity,
-                            "book" : prog.book, "price" : prog.price})
+@app.post('/programme/{id}')
+async def updatePr(id : int, lvl:str = Form(None), ints : str = Form(None), bk: str = Form(None),\
+               pr:int = Form(None)):
+    if lvl:
+        db.session.query(ModelProgramme).filter(ModelProgramme.id_programme == id).\
+            update({"level" : lvl})
+    if ints:
+        db.session.query(ModelProgramme).filter(ModelProgramme.id_programme == id).\
+            update({"intensity" : ints})
+    if bk:
+        db.session.query(ModelProgramme).filter(ModelProgramme.id_programme == id).\
+            update({"book" : bk})
+    if pr:
+        db.session.query(ModelProgramme).filter(ModelProgramme.id_programme == id).\
+            update({"price" : pr})
     db.session.commit()
-    return db.session.query(ModelProgramme).filter(ModelProgramme.id_programme == id).first()
+    return RedirectResponse('/programme/' + str(id), status.HTTP_302_FOUND)
     
 # timetable operations
 @app.post('/timetable/', response_model=SchemaTimetable)

@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+   <body>
+      <h2>Edit programme.</h2>
+      <form action="/programme/{{id}}" method="POST">
+        <label for="lvl">Choose level:</label>
+        <select name="lvl">
+        <option></option>
+        <option value="A1">A1</option>
+        <option value="A2">A2</option>
+        <option value="B1">B1</option>
+        <option value="B2">B2</option>
+        <option value="C1">C1</option>
+        <option value="C2">C2</option>
+        </select>
+        <label for="ints">Choose level:</label>
+        <select name="ints">
+         <option></option>
+        <option value="L">Low</option>
+        <option value="M">Medium</option>
+        <option value="I">Intense</option>
+        </select>
+        <p>Enter book:</p>
+         <p><input type='text' name='bk'/></p>
+         <p>Enter price:</p>
+         <p><input type='number' name='pr'/></p>
+         <p><input type='submit' value='Save'/></p>
+      </form>
+   </body>
+</html>
