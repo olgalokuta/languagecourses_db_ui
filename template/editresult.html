@@ -1,0 +1,11 @@
+<!DOCTYPE html>
+<html>
+   <body>
+      <h2>Edit lesson result {{ld}} by student {{nm}}.</h2>
+      <form action="/lesson/{{il}}/{{ist}}" method="POST">
+         <p>Enter mark (- for absent, + for present, mark ID for mark):</p>
+         <p><input type='text' name='mk' required="required"/></p>
+         <p><input type='submit' value='Save'/></p>
+      </form>
+   </body>
+</html>

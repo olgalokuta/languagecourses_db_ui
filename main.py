@@ -793,29 +793,151 @@ async def updateTT(id : int, wd:int = Form(None), lt: str = Form(None)):
     return RedirectResponse("/timetable/" + str(id), status.HTTP_302_FOUND)
     
 # lesson operations
-@app.post('/lesson/', response_model=SchemaLesson)
-def createLes(les: SchemaLesson):
-    db_les = ModelLesson(id_course = les.id_course, ldate = les.ldate, 
-                         topic = les.topic)
+@app.post('/lesson/')
+def createLes(ic:int = Form(...), ld:str = Form(...), t:str = Form(None)):
+    db_les = ModelLesson(id_course = ic, ldate = datetime.strptime(ld,'%d.%m.%Y').date(), 
+                         topic = t)
     db.session.add(db_les)
     db.session.commit()
     db.session.refresh(db_les)
-    return db_les
+    return RedirectResponse("/lesson/" + str(db_les.id_lesson), status.HTTP_302_FOUND)
 
 @app.get('/lesson/')
 async def listLes():
-    les = db.session.query(ModelLesson).all()
-    return les
+    les = db.session.query(ModelLesson).order_by("ldate").all()
+    page = """
+<html>
+   <body>
+    <form>
+    <h2>Lessons:</h2>
+         <p>Click to create:
+         <button formaction="/lesson/create/" type="submit">Create</button></p>
+    </form>
+    <table>
+    <tr>
+    <th>Lesson ID</th>
+    <th>Course ID</th>
+    <th>Date</th>
+    <th>Topic</th>
+    </tr>
+    """
+    for l in les:
+        if l.topic:
+            t = l.topic
+        else:
+            t = " - "
+        page += '<tr><td><a href="/lesson/' + str(l.id_lesson) + '">' + str(l.id_lesson)
+        page += '</a></td><td><a href="/course/' + str(l.id_course) + '">' + str(l.id_course)
+        page += '</a></td><td>' + date.strftime(l.ldate, "%d.%m.%Y") + '</td><td>' + t + '</td></tr>'
+    page += """
+    </table>
+   </body>
+</html>
+"""
+    return HTMLResponse(page)
 
-@app.get('/lesson/{id}', response_model=SchemaLesson)
+@app.get('/lesson/{id}')
 async def readLes(id : int):
-    les = db.session.query(ModelLesson).filter(ModelLesson.id_lesson == id)
-    if les == None:
-        return Response(status_code=status.HTTP_404_NOT_FOUND)
+    les = db.session.query(ModelLesson).filter(ModelLesson.id_lesson == id).first()
+    page = """
+<html>
+   <body>
+    <form>
+    <h2>Lesson:</h2>
+          <p>Click to edit: """ +\
+    '<button formaction="/lesson/edit/' + str(id) + \
+    """ " type="submit">Edit</button></p>
+         <p>Click to delete: """ +\
+    '<button formaction="/lesson/delete/' + str(id) + \
+    """ " type="submit">Delete</button></p>
+    </form>
+    <table>
+    <tr>
+    <th>Lesson ID</th>
+    <th>Course ID</th>
+    <th>Date</th>
+    <th>Topic</th>
+    </tr>
+    """
+    if les.topic:
+        t = les.topic
     else:
-        return les.first()
+        t = " - "
+    page += '<tr><td>' + str(id)
+    page += '</td><td><a href="/course/' + str(les.id_course) + '">' + str(les.id_course)
+    page += '</a></td><td>' + date.strftime(les.ldate, "%d.%m.%Y") + '</td><td>' + t + '</td></tr>'
+    page += """
+</table>
+<h3>Attendance:</h3>
+<table>
+"""
+    students = db.session.query(ModelStContract)\
+        .filter(ModelStContract.id_course == les.id_course).all()
+    for st in students:
+        name = db.session.query(ModelStudent).filter(ModelStudent.id_student == st.id_student).first().sname
+        res = db.session.query(ModelLResult).filter(ModelLResult.id_student == st.id_student,\
+                                                    ModelLResult.id_lesson == id).first()
+        if res == None:
+            r = " - "
+        else:
+            if res.id_mark == None:
+                r = " + "
+            else:
+                r = str(db.session.query(ModelMark).filter(ModelMark.id_mark == res.id_mark).first().mark)
+        page += '<tr><td>' + name + '</td><td><a href="/lesson/' + str(id) + '/' \
+                + str(st.id_student) + '">' + r + '</a></td></tr>'
+    page += """
+    </table>
+   </body>
+</html>
+"""
+    return HTMLResponse(page)
 
-@app.delete('/lesson/{id}')
+@app.get('/lesson/{il}/{ist}')
+async def res(request:Request, il:int, ist:int):
+    sn = db.session.query(ModelStudent).filter(ModelStudent.id_student == ist).first().sname
+    ld = db.session.query(ModelLesson).filter(ModelLesson.id_lesson == il).first().ldate
+    ld = date.strftime(ld, '%d.%m.%Y')
+    return templates.TemplateResponse("editresult.html", {"request":request, "il":il,
+                                                        "ist":ist, "nm":sn, "ld":ld})
+
+@app.post('/lesson/{il}/{ist}')
+async def res(il:int, ist:int, mk:str = Form(...)):
+    res = db.session.query(ModelLResult).filter(ModelLResult.id_student == ist, \
+                                                ModelLResult.id_lesson == il)
+    if res.first() == None:
+        if mk != '-':
+            if mk =='+':
+                db_lr = ModelLResult(id_student = ist, id_lesson = il)
+                db.session.add(db_lr)
+                db.session.commit()
+            else:
+                db_lr = ModelLResult(id_student = ist, id_lesson = il, id_mark = int(mk))
+                db.session.add(db_lr)
+                db.session.commit()
+    else:
+        if mk == '-':
+            res.delete(synchronize_session=False)
+            db.session.commit()
+        elif mk == '+':
+            res.update({"id_mark":None})
+            db.session.commit()
+        else:
+            res.update({"id_mark":int(mk)})
+            db.session.commit()
+    return RedirectResponse("/lesson/" + str(il), status.HTTP_302_FOUND)
+
+
+
+@app.get('/lesson/create/')
+async def root(request : Request):
+    return templates.TemplateResponse("createlesson.html", {"request": request})
+
+@app.get('/lesson/edit/{id}')
+async def root(request : Request, id: int):
+    return templates.TemplateResponse("editlesson.html", {"request": request, "id": id})
+
+@app.get('/lesson/delete/{id}')
 async def deleteLes(id : int):
     del_les = db.session.query(ModelLesson).filter(ModelLesson.id_lesson == id)
     if del_les == None:
@@ -823,13 +945,22 @@ async def deleteLes(id : int):
     else:
         del_les.delete(synchronize_session=False)
         db.session.commit()
+        return RedirectResponse("/lesson/", status.HTTP_302_FOUND)
 
-@app.put('/lesson/{id}', response_model=SchemaLesson)
-async def updateLes(id : int, les : SchemaLesson):
-    db.session.query(ModelLesson).filter(ModelLesson.id_lesson == id).\
-        update({"id_course" : les.id_course, "ldate" : les.ldate, "topic" : les.topic})
+@app.post('/lesson/{id}')
+async def updateLes(id : int, ic:int = Form(None), ld:str = Form(None), t:str = Form(None)):
+    if ic:
+        db.session.query(ModelLesson).filter(ModelLesson.id_lesson == id).\
+        update({"id_course" : ic})
+    if ld:
+        ld = datetime.strptime(ld, '%d.%m.%Y').date()
+        db.session.query(ModelLesson).filter(ModelLesson.id_lesson == id).\
+        update({"ldate" : ld})
+    if t:
+        db.session.query(ModelLesson).filter(ModelLesson.id_lesson == id).\
+        update({"topic" : t})
     db.session.commit()
-    return db.session.query(ModelLesson).filter(ModelLesson.id_lesson == id).first()
+    return RedirectResponse("/lesson/" + str(id), status.HTTP_302_FOUND)
     
 # To run locally
 if __name__ == '__main__':
