@@ -428,7 +428,21 @@ async def readC(id : int):
     time.strftime(tt.lessontime, '%H:%M') + '<td><a href="/programme/'+ str(course.id_programme) +\
         '">' + str(course.id_programme) + '</a></td><td>'+ date.strftime(course.cdate, '%d.%m.%Y') + '</td></tr>'
     page += """
-    </table>
+    </table>"""
+    teacher = db.session.query(ModelTeaContract).filter(ModelTeaContract.id_course == id).\
+              order_by(desc("tcdate")).first()
+    if teacher:
+        teacher = db.session.query(ModelTeacher).filter(ModelTeacher.id_teacher == teacher.id_teacher).first()
+        teacher = '<a href="/teacher/' + str(teacher.id_teacher) + '">' + teacher.tname + '</a>'
+    else:
+        teacher = "None"
+    page += "<h4>Current teacher: " + teacher + "</h4>"
+    scs = db.session.query(ModelStContract).filter(ModelStContract.id_course == id).all()
+    page += "<h4>Students:</h4>"
+    for s in scs:
+        student = db.session.query(ModelStudent).filter(ModelStudent.id_student == s.id_student).first()
+        page += '<p><a href="/student/' + str(student.id_student) + '">' + student.sname + '</a></p>'
+    page += """
    </body>
 </html>
 """
