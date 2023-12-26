@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html>
+   <body>
+      <h2>Assign teacher {{nm}} to course:</h2>
+      <form action="/teacher/assign/{{id}}" method="POST">
+         <p>Enter course id:</p>
+         <p><input type='number' name='ic' required="required"/></p>
+         <p>Enter enrollment date (dd.mm.yyyy):</p>
+         <p><input type='text' name='tcd'/></p>
+         <p><input type='submit' value='Save'/></p>
+      </form>
+   </body>
+</html>

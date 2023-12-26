@@ -275,16 +275,19 @@ async def readT(id : int):
     page += """
     </table>
     <h3>Teaches courses:</h3>
-    <p>"""
+    <table>
+    <tr><td>   </td><td></td></tr>
+    """
     tc = db.session.query(ModelTeaContract).filter(ModelTeaContract.id_teacher == id).all()
     for c in tc:
         if c.id_course in cur:
-            page += str(c.id_course) + ' '
-    page += '</p>' +\
+            page += '<tr><td><a href="/course/' + str(c.id_course) + '">' + str(c.id_course) +\
+                    '</a></td><td><button formaction="/teacher/remove/' + str(id) + '/' + str(c.id_course) +\
+                    '" type="submit">Remove</button></td></tr>'
+    page += """
+    </table>""" +\
     '<button formaction="/teacher/assign/' + str(id) + \
-    """ " type="submit">Assign to course</button></p>""" +\
-    '<button formaction="/teacher/remove/' + str(id) + \
-    """ " type="submit">Remove from course</button></p>
+    """ " type="submit">Assign to course</button></p>
    </form>
    </body>
 </html>
@@ -298,6 +301,33 @@ async def root(request : Request):
 @app.get('/teacher/edit/{id}')
 async def root(request : Request, id: int):
     return templates.TemplateResponse("editteacher.html", {"request": request, "id": id})
+
+@app.get('/teacher/assign/{id}')
+async def root(request : Request, id: int):
+    name = db.session.query(ModelTeacher).filter(ModelTeacher.id_teacher == id).first().tname
+    return templates.TemplateResponse("assignteacher.html", {"request": request, "id": id, "nm" : name})
+
+@app.post('/teacher/assign/{id}')
+async def updateSt(id : int, ic : int = Form(...), tcd : str = Form(None)):
+    if tcd:
+        tcd = datetime.strptime(tcd, '%d.%m.%Y').date()
+    else:
+        tcd = datetime.now().date()
+    new_tc = ModelTeaContract(id_teacher = id, id_course = ic, tcdate = tcd)
+    db.session.add(new_tc)
+    db.session.commit()
+    return RedirectResponse("/teacher/" + str(id), status.HTTP_302_FOUND) 
+
+@app.get('/teacher/remove/{idt}/{idc}')
+async def deleteT(idt : int, idc:int):
+    del_tc = db.session.query(ModelTeaContract).filter(ModelTeaContract.id_teacher == idt,\
+                                                       ModelTeaContract.id_course == idc)
+    if del_tc == None:
+        return Response(status_code=status.HTTP_404_NOT_FOUND)
+    else:
+        del_tc.delete(synchronize_session=False)
+        db.session.commit()
+        return RedirectResponse("/teacher/" + str(idt), status.HTTP_302_FOUND) 
 
 @app.get('/teacher/delete/{id}')
 async def deleteT(id : int):
