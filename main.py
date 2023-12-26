@@ -7,19 +7,6 @@ from fastapi import Form
 from sqlalchemy import desc, func
 from datetime import datetime, date, time
 
-from schema import Course as SchemaCourse
-from schema import Lesson as SchemaLesson
-from schema import LResult as SchemaLResult
-from schema import Mark as SchemaMark
-from schema import Programme as SchemaProgramme
-from schema import Status as SchemaStatus
-from schema import StContract as SchemaStContract
-from schema import Student as SchemaStudent
-from schema import Teacher as SchemaTeacher
-from schema import TeaContract as SchemaTeaContract
-from schema import TeaStatus as SchemaTeaStatus
-from schema import Timetable as SchemaTimetable
-
 from models import Course as ModelCourse
 from models import Lesson as ModelLesson
 from models import LResult as ModelLResult
@@ -48,6 +35,15 @@ app.add_middleware(DBSessionMiddleware, db_url=os.environ['DATABASE_URL'])
 weekdays = {1:"Mon", 2:"Tue", 3:"Wed", 4:"Thu", 5:"Fri", 6:"Sat", 7:"Sun"}
 intens = {"L": "Low", "M": "Medium", "I": "intense"}
 
+async def currentCourses():
+    r = []
+    tts = db.session.query(ModelTimetable).all()
+    for tt in tts:
+        course = db.session.query(ModelCourse).filter(ModelCourse.id_timetable == tt.id_timetable).\
+        order_by(desc("cdate")).first()
+        if course:
+            r.append(course.id_course)
+    return r
 
 @app.get('/')
 async def root(request : Request):
@@ -105,7 +101,8 @@ def main():
     return HTMLResponse(page)
     
 @app.get('/student/{id}')
-def main(id : int):
+async def main(id : int):
+    cur = await currentCourses()
     student = db.session.query(ModelStudent).filter(ModelStudent.id_student == id).first()
     page = """
 <html>
@@ -118,7 +115,6 @@ def main(id : int):
          <p>Click to delete: """ +\
     '<button formaction="/student/delete/' + str(id) + \
     """ " type="submit">Delete</button></p>
-    </form>
     <table>
     <tr>
     <th>Name</th>
@@ -129,12 +125,21 @@ def main(id : int):
     page += """
     </table>
     <h3>Attends courses:</h3>
-    <p>"""
-    sc = db.session.query(ModelStContract).filter(ModelStContract.id_student == id)
+    <table>
+    <tr><td>   </td><td></td></tr>
+    """
+    sc = db.session.query(ModelStContract).filter(ModelStContract.id_student == id).all()
     for c in sc:
-        page += str(c.id_course) + ' '
+        if c.id_course in cur:
+            page += '<tr><td><a href="/course/' + str(c.id_course) + '">' + str(c.id_course) +\
+                    '</a></td><td><button formaction="/student/remove/' + str(id) + '/' + str(c.id_course) +\
+                    '" type="submit">Remove</button></td></tr>'
     page += """
-    </p>
+    </table>
+    </p>""" +\
+    '<button formaction="/student/enroll/' + str(id) + \
+    """ " type="submit">Enroll to course</button></p>
+    </form>
    </body>
 </html>
 """
@@ -146,7 +151,34 @@ async def root(request : Request):
 
 @app.get('/student/edit/{id}')
 async def root(request : Request, id: int):
-    return templates.TemplateResponse("editstudent.html", {"request": request, "id": id})
+    name = db.session.query(ModelStudent).filter(ModelStudent.id_student == id).first().sname
+    return templates.TemplateResponse("editstudent.html", {"request": request, "id": id, "nm":name})
+
+@app.get('/student/enroll/{id}')
+async def root(request : Request, id: int):
+    return templates.TemplateResponse("enrollstudent.html", {"request": request, "id": id})
+
+@app.post('/student/enroll/{id}')
+async def updateSt(id : int, ic : int = Form(...), scd : str = Form(None)):
+    if scd:
+        scd = datetime.strptime(scd, '%d.%m.%Y').date()
+    else:
+        scd = datetime.now().date()
+    new_sc = ModelStContract(id_student = id, id_course = ic, scdate = scd)
+    db.session.add(new_sc)
+    db.session.commit()
+    return RedirectResponse("/student/" + str(id), status.HTTP_302_FOUND) 
+
+@app.get('/student/remove/{ids}/{idc}/')
+async def root(ids: int, idc:int):
+    db_sc = db.session.query(ModelStContract).filter(ModelStContract.id_student == ids,\
+                                                     ModelStContract.id_course == idc)
+    if db_sc == None:
+        return Response(status_code=status.HTTP_404_NOT_FOUND)
+    else:
+        db_sc.delete(synchronize_session=False)
+        db.session.commit()
+    return RedirectResponse("/student/" + str(ids), status.HTTP_302_FOUND) 
 
 @app.get('/student/delete/{id}')
 async def deleteSt(id : int):
@@ -190,7 +222,6 @@ async def listT():
     <h2>Teachers:</h2>
          <p>Click to create: 
          <button formaction="/teacher/create/" type="submit">Create</button></p>
-    </form>
     <table>
     <tr>
     <th>Name</th>
@@ -199,14 +230,15 @@ async def listT():
     </tr>
     """
     for t in teacher:
-        stat = db.session.query(ModelTeaStatus).filter(ModelTeaStatus.id_teacher == id).\
-            order_by(desc('tsdate')).first().id_status
+        stat = db.session.query(ModelTeaStatus).filter(ModelTeaStatus.id_teacher == t.id_teacher).\
+            order_by(desc("tsdate")).first().id_status
         stat = db.session.query(ModelStatus).filter(ModelStatus.id_status == stat).\
             first().status
         page += '<tr><td><a href="/teacher/' + str(t.id_teacher) + '">' +\
         t.tname +  '</a></td><td>' + str(t.salary) + '</td><td>'+ stat + '</td></tr>'
     page += """
     </table>
+    </form>
    </body>
 </html>
 """
@@ -214,6 +246,7 @@ async def listT():
 
 @app.get('/teacher/{id}')
 async def readT(id : int):
+    cur = await currentCourses()
     teacher = db.session.query(ModelTeacher).filter(ModelTeacher.id_teacher == id).first()
     stat = db.session.query(ModelTeaStatus).filter(ModelTeaStatus.id_teacher == id).\
         order_by(desc('tsdate')).first().id_status
@@ -230,7 +263,6 @@ async def readT(id : int):
          <p>Click to delete: """ +\
     '<button formaction="/teacher/delete/' + str(id) + \
     """ " type="submit">Delete</button></p>
-    </form>
     <table>
     <tr>
     <th>Name</th>
@@ -242,13 +274,18 @@ async def readT(id : int):
         '</td><td>' + stat + '</td></tr>'
     page += """
     </table>
-    <h3>Attends courses:</h3>
+    <h3>Teaches courses:</h3>
     <p>"""
-    # sc = db.session.query(ModelStContract).filter(ModelStContract.id_student == id)
-    # for c in sc:
-    #     page += str(c.id_course) + ' '
-    page += """
-    </p>
+    tc = db.session.query(ModelTeaContract).filter(ModelTeaContract.id_teacher == id).all()
+    for c in tc:
+        if c.id_course in cur:
+            page += str(c.id_course) + ' '
+    page += '</p>' +\
+    '<button formaction="/teacher/assign/' + str(id) + \
+    """ " type="submit">Assign to course</button></p>""" +\
+    '<button formaction="/teacher/remove/' + str(id) + \
+    """ " type="submit">Remove from course</button></p>
+   </form>
    </body>
 </html>
 """
@@ -299,7 +336,7 @@ def createC(pr : int = Form(...), tt : int = Form(...), cd : str = Form(None)):
 
 @app.get('/course/')
 async def listC():
-    course = db.session.query(ModelCourse).all().order_by(desc("cdate"))
+    course = await currentCourses()
     page = """
 <html>
    <body>
@@ -317,10 +354,11 @@ async def listC():
     </tr>
     """
     for c in course:
+        c = db.session.query(ModelCourse).filter(ModelCourse.id_course == c).first()
         tt = db.session.query(ModelTimetable).filter\
             (ModelTimetable.id_timetable == c.id_timetable).first()
         page += '<tr><td><a href="/course/' + str(c.id_course) + '">' +\
-            str(tt.id_course) +  '</a></td><td>' + weekdays[tt.weekday] + ' ' +\
+            str(c.id_course) +  '</a></td><td>' + weekdays[tt.weekday] + ' ' +\
             time.strftime(tt.lessontime, '%H:%M') + '<td><a href="/programme/'+ str(c.id_programme) +\
                 '">' + str(c.id_programme) + '</a></td><td>'+ date.strftime(c.cdate, '%d.%m.%Y') + '</td></tr>'
     page += """
